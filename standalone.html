@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asesor UX - Clínica Las Condes</title>
+    <title>Asesor UX - Consultoría Clínica Las Condes</title>
     <!-- React & ReactDOM from CDN -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -16,15 +16,21 @@
     <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #0a0a0a; color: #e0e0e0; }
-        .markdown-container h1 { font-size: 1.5rem; font-weight: bold; color: #f97316; margin-top: 1rem; }
-        .markdown-container h2 { font-size: 1.25rem; font-weight: bold; color: #fb923c; margin-top: 1rem; }
-        .markdown-container p { margin-bottom: 0.75rem; line-height: 1.6; }
-        .markdown-container ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
-        ::-webkit-scrollbar { width: 6px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0F1117; color: #E2E8F0; }
+        .markdown-container h1 { font-size: 1.5rem; font-weight: bold; color: #6366f1; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; }
+        .markdown-container h2 { font-size: 1.25rem; font-weight: bold; color: #818cf8; margin: 1.25rem 0 0.5rem; }
+        .markdown-container h3 { font-size: 1.1rem; font-weight: bold; color: #a5b4fc; margin: 1rem 0 0.5rem; }
+        .markdown-container p { margin-bottom: 1rem; line-height: 1.7; }
+        .markdown-container ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 1.25rem; }
+        .markdown-container li { margin-bottom: 0.5rem; }
+        .markdown-container strong { color: #fff; font-weight: 600; }
+        .markdown-container blockquote { border-left: 4px solid #6366f1; padding-left: 1rem; color: #94a3b8; font-style: italic; margin: 1rem 0; }
+        .markdown-container code { font-family: 'JetBrains Mono', monospace; background: #1e293b; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.85em; }
+        ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #30363D; border-radius: 10px; border: 2px solid #0F1117; }
+        ::-webkit-scrollbar-thumb:hover { background: #484f58; }
     </style>
 </head>
 <body>
@@ -78,8 +84,8 @@ Responde siempre en español. Tono profesional y directo. Máximo 350 palabras p
 
             useEffect(() => {
                 scrollToBottom();
-                lucide.createIcons();
-            }, [messages, isConfigured]);
+                if (window.lucide) lucide.createIcons();
+            }, [messages, isConfigured, isLoading, showSystemPrompt]);
 
             const handleSaveApiKey = (e) => {
                 e.preventDefault();
@@ -93,7 +99,8 @@ Responde siempre en español. Tono profesional y directo. Máximo 350 palabras p
                 e.preventDefault();
                 if (!input.trim() || isLoading) return;
 
-                const userMessage = { role: 'user', content: input };
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const userMessage = { role: 'user', content: input, timestamp };
                 setMessages(prev => [...prev, userMessage]);
                 setInput('');
                 setIsLoading(true);
@@ -110,120 +117,211 @@ Responde siempre en español. Tono profesional y directo. Máximo 350 palabras p
                                     parts: [{ text: m.content }] 
                                 })),
                                 { role: 'user', parts: [{ text: input }] }
-                            ]
+                            ],
+                            generationConfig: {
+                                temperature: 0.7,
+                                topP: 0.95,
+                                maxOutputTokens: 1024
+                            }
                         })
                     });
 
                     const data = await response.json();
-                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Error en la respuesta.";
                     
-                    setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+                    if (data.error) {
+                        throw new Error(data.error.message || "Error desconocido de API");
+                    }
+
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Error: No se pudo obtener respuesta.";
+                    
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: text, 
+                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                    }]);
                 } catch (error) {
-                    setMessages(prev => [...prev, { role: 'assistant', content: "Error: No se pudo conectar con la API. Verifica tu clave." }]);
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: `**Error de Conexión:** ${error.message || "No se pudo conectar con la API de Gemini. Revisa tu API Key y conexión."}`,
+                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    }]);
                 } finally {
                     setIsLoading(false);
                 }
             };
 
+            const clearChat = () => {
+                if (confirm('¿Estás seguro de que quieres limpiar el historial de la sesión?')) {
+                    setMessages([]);
+                }
+            };
+
             if (!isConfigured) {
                 return (
-                    <div className="min-h-screen flex items-center justify-center p-4">
-                        <div className="max-w-md w-full bg-[#141414] border border-white/10 rounded-2xl p-8 shadow-2xl">
-                            <div className="flex justify-center mb-6">
-                                <i data-lucide="shield-check" className="w-12 h-12 text-orange-500"></i>
+                    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0F1117]">
+                        <div className="max-w-md w-full bg-[#161B22] border border-[#30363D] rounded-2xl p-8 shadow-2xl shadow-black/50">
+                            <div className="flex justify-center mb-8">
+                                <div className="p-4 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-500/20">
+                                    <i data-lucide="shield-check" className="w-10 h-10 text-white"></i>
+                                </div>
                             </div>
-                            <h1 className="text-2xl font-bold text-center mb-2 tracking-tight">Asesor UX AI</h1>
-                            <p className="text-gray-400 text-center mb-8 text-sm">Configura tu acceso para Clínica Las Condes.</p>
-                            <form onSubmit={handleSaveApiKey} className="space-y-4">
+                            <h1 className="text-2xl font-bold text-center mb-2 tracking-tight text-white">Asesor UX AI</h1>
+                            <p className="text-slate-400 text-center mb-10 text-sm">Entorno estratégico para Clínica Las Condes.</p>
+                            <form onSubmit={handleSaveApiKey} className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-xs uppercase tracking-widest text-gray-500 font-semibold">Gemini API Key</label>
+                                    <label className="text-[11px] uppercase tracking-widest text-slate-500 font-bold">Gemini API Key</label>
                                     <input 
                                         type="password" 
                                         value={apiKey}
                                         onChange={(e) => setApiKey(e.target.value)}
                                         placeholder="Ingresa tu clave de API..."
-                                        className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50"
+                                        className="w-full bg-[#0D1117] border border-[#30363D] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all shadow-inner"
                                         required
                                     />
                                 </div>
-                                <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-orange-500/20">
+                                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-[0.98]">
                                     Comenzar Consultoría
                                 </button>
                             </form>
+                            <div className="mt-8 flex gap-3 p-4 bg-blue-500/5 border border-blue-500/10 rounded-xl items-start">
+                                <i data-lucide="info" className="w-4 h-4 text-blue-400 shrink-0 mt-0.5"></i>
+                                <p className="text-[11px] text-blue-300 leading-relaxed">
+                                    Tu API Key se almacena localmente y se usa solo para peticiones directas a Google AI.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 );
             }
 
             return (
-                <div className="min-h-screen flex flex-col">
-                    <header className="border-b border-white/10 bg-[#141414]/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center">
-                                <i data-lucide="zap" className="w-6 h-6 text-white"></i>
+                <div className="min-h-screen flex font-sans overflow-hidden bg-[#0F1117]">
+                    {/* Sidebar */}
+                    <aside className="w-80 border-r border-[#1E293B] bg-[#0A0C10] flex flex-col shrink-0 hidden lg:flex">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-10">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                                    <i data-lucide="zap" className="w-6 h-6 text-white"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-lg font-bold text-white leading-tight">Asesor UX AI</h1>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Consultoría Senior</p>
+                                </div>
                             </div>
-                            <div>
-                                <h1 className="font-bold text-lg leading-none">Asesor UX</h1>
-                                <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Senior Business Consultant</p>
+
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Contexto de Negocio</label>
+                                    <div className="p-4 bg-[#161B22] border border-[#30363D] rounded-xl">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                            <h3 className="text-xs font-bold text-white">Clínica Las Condes</h3>
+                                        </div>
+                                        <p className="text-[11px] text-slate-400 leading-relaxed">Pago móvil • Target 30-45 años • Abandono crítico.</p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-[#161B22] border border-[#30363D] rounded-xl overflow-hidden">
+                                    <button onClick={() => setShowSystemPrompt(!showSystemPrompt)} className="w-full flex items-center justify-between p-4 text-xs font-bold hover:bg-[#1C2128] transition-colors">
+                                        <span className="flex items-center gap-2"><i data-lucide="target" className="w-4 h-4 text-indigo-400"></i> System Prompt</span>
+                                        <i data-lucide={showSystemPrompt ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-slate-500"></i>
+                                    </button>
+                                    {showSystemPrompt && (
+                                        <div className="p-4 border-t border-[#30363D] text-[10px] text-slate-500 font-mono whitespace-pre-wrap max-h-48 overflow-y-auto italic">
+                                            {SYSTEM_PROMPT}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex flex-col gap-2">
+                                    <button onClick={clearChat} className="w-full flex items-center gap-3 p-3 rounded-xl text-xs text-slate-400 hover:bg-white/5 hover:text-white transition-all group">
+                                        <i data-lucide="trash-2" className="w-4 h-4 group-hover:text-red-400"></i> Limpiar Sesión
+                                    </button>
+                                    <button onClick={() => { localStorage.removeItem('gemini_api_key'); setIsConfigured(false); }} className="w-full flex items-center gap-3 p-3 rounded-xl text-xs text-slate-400 hover:bg-white/5 hover:text-white transition-all group">
+                                        <i data-lucide="log-out" className="w-4 h-4 group-hover:text-amber-400"></i> Cambiar API Key
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <button onClick={() => { localStorage.removeItem('gemini_api_key'); setIsConfigured(false); }} className="text-gray-400 hover:text-white">
-                            <i data-lucide="settings" className="w-5 h-5"></i>
-                        </button>
-                    </header>
-
-                    <main className="flex-1 overflow-hidden flex flex-col max-w-4xl mx-auto w-full">
-                        <div className="px-6 py-2">
-                            <button onClick={() => setShowSystemPrompt(!showSystemPrompt)} className="w-full flex items-center justify-between p-3 bg-[#1a1a1a] border border-white/5 rounded-xl hover:bg-[#222222] transition-colors mt-2">
-                                <div className="flex items-center gap-2">
-                                    <i data-lucide="target" className="w-4 h-4 text-orange-500"></i>
-                                    <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">System Instruction (Review Mode)</span>
-                                </div>
-                                <i data-lucide={showSystemPrompt ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-gray-400"></i>
-                            </button>
-                            {showSystemPrompt && (
-                                <div className="p-4 mt-2 bg-[#141414] border border-white/5 rounded-xl text-[12px] text-gray-400 font-mono whitespace-pre-wrap max-h-48 overflow-y-auto">
-                                    {SYSTEM_PROMPT}
-                                </div>
-                            )}
+                        <div className="mt-auto p-6 border-t border-[#1E293B] bg-[#0D1117] text-center">
+                            <p className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">Professional Polish • v2.0</p>
                         </div>
+                    </aside>
 
-                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+                    {/* Chat Main */}
+                    <main className="flex-grow flex flex-col relative overflow-hidden">
+                        <header className="h-16 border-b border-[#1E293B] bg-[#0F1117]/80 backdrop-blur-md flex items-center px-8 justify-between shrink-0 z-10">
+                            <div className="flex items-center gap-3">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <h2 className="text-sm font-semibold">UX Strategy Session</h2>
+                            </div>
+                            <div className="flex gap-4 items-center">
+                                <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                    <span className="flex items-center gap-1.5"><i data-lucide="shield-check" className="w-3 h-3 text-indigo-500"></i> Business UX</span>
+                                    <span className="flex items-center gap-1.5"><i data-lucide="trending-up" className="w-3 h-3 text-emerald-500"></i> ROI Focus</span>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div className="flex-1 overflow-y-auto px-6 py-10 space-y-10 bg-gradient-to-b from-[#0F1117] to-[#0A0C10]">
                             {messages.length === 0 && (
-                                <div className="h-full flex flex-col items-center justify-center text-center space-y-6 max-w-md mx-auto opacity-50">
-                                    <i data-lucide="credit-card" className="w-12 h-12 text-orange-500"></i>
-                                    <div>
-                                        <h2 className="text-xl font-bold">Clínica Las Condes</h2>
-                                        <p className="text-sm">Inicia la consultoría sobre el flujo de pago móvil.</p>
+                                <div className="h-full flex flex-col items-center justify-center text-center max-w-xl mx-auto space-y-8 opacity-50">
+                                    <div className="w-20 h-20 bg-indigo-500/10 rounded-3xl flex items-center justify-center ring-1 ring-indigo-500/20">
+                                        <i data-lucide="lightbulb" className="w-10 h-10 text-indigo-500"></i>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h2 className="text-2xl font-bold text-white tracking-tight">Estrategia de Pagos Móviles</h2>
+                                        <p className="text-slate-400 text-sm">Presenta tus hipótesis de mejora para Clínica Las Condes.</p>
                                     </div>
                                 </div>
                             )}
+
                             {messages.map((msg, idx) => (
-                                <div key={idx} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    {msg.role === 'assistant' && <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-1"><i data-lucide="bot" className="w-5 h-5 text-white"></i></div>}
-                                    <div className={`max-w-[85%] rounded-2xl px-5 py-4 ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-[#1a1a1a] border border-white/10 rounded-tl-none'}`}>
-                                        <div className="markdown-container text-sm" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }}></div>
+                                <div key={idx} className={`flex items-start gap-5 max-w-4xl ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}>
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-1 shadow-md ${msg.role === 'user' ? 'bg-slate-700' : 'bg-indigo-600'}`}>
+                                        <i data-lucide={msg.role === 'user' ? "user" : "bot"} className="w-5 h-5 text-white"></i>
                                     </div>
-                                    {msg.role === 'user' && <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center shrink-0 mt-1"><i data-lucide="user" className="w-4 h-4 text-gray-300"></i></div>}
+                                    <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                        <div className={`rounded-2xl px-6 py-4 shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-[#161B22] border border-[#30363D] text-slate-300 rounded-tl-none'}`}>
+                                            <div className="markdown-container text-sm" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }}></div>
+                                        </div>
+                                        <span className="text-[9px] font-bold text-slate-600 mt-2 uppercase tracking-tighter">
+                                            {msg.timestamp} {msg.role === 'assistant' && '• Gemini 1.5 Flash'}
+                                        </span>
+                                    </div>
                                 </div>
                             ))}
-                            {isLoading && <div className="text-orange-500 text-xs animate-pulse font-bold">Asesor UX está pensando...</div>}
+                            {isLoading && (
+                                <div className="flex items-start gap-5 max-w-3xl mr-auto">
+                                    <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0 mt-1 shadow-lg shadow-indigo-500/20">
+                                        <i data-lucide="bot" className="w-5 h-5 text-white animate-pulse"></i>
+                                    </div>
+                                    <div className="bg-[#161B22] border border-[#30363D] rounded-2xl rounded-tl-none px-6 py-5 flex gap-1.5 items-center">
+                                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></div>
+                                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                                    </div>
+                                </div>
+                            )}
                             <div ref={messagesEndRef} />
                         </div>
 
-                        <div className="p-6">
-                            <form onSubmit={handleSendMessage} className="relative flex items-center">
-                                <input 
-                                    type="text" 
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    placeholder="Escribe tu propuesta..."
-                                    className="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-6 py-4 pr-16 text-sm text-white focus:outline-none focus:border-orange-500/50"
-                                />
-                                <button type="submit" className="absolute right-3 p-2 bg-orange-500 text-white rounded-xl">
-                                    <i data-lucide="send" className="w-5 h-5"></i>
-                                </button>
-                            </form>
+                        <div className="p-8 shrink-0 bg-[#0F1117] border-t border-[#1E293B]">
+                            <div className="max-w-4xl mx-auto">
+                                <form onSubmit={handleSendMessage} className="relative flex items-center bg-[#161B22] border border-[#30363D] rounded-2xl p-2 pl-6 focus-within:border-indigo-500 transition-all shadow-2xl">
+                                    <input 
+                                        type="text" 
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        placeholder="Describe tu propuesta de UX..."
+                                        className="w-full bg-transparent border-none focus:ring-0 text-sm py-4 h-14 text-white placeholder-slate-600"
+                                        disabled={isLoading}
+                                    />
+                                    <button type="submit" disabled={!input.trim() || isLoading} className={`p-3.5 rounded-xl transition-all ${input.trim() && !isLoading ? 'bg-indigo-600 text-white shadow-lg' : 'bg-[#0D1117] text-slate-700 cursor-not-allowed'}`}>
+                                        <i data-lucide="send" className="w-5 h-5"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     </main>
                 </div>

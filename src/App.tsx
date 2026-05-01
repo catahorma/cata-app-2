@@ -95,40 +95,44 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const aiInput = new GoogleGenAI(apiKey);
+      const aiInput = new GoogleGenAI({ apiKey });
       
       const chatHistory = messages.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }]
       }));
 
-      const model = aiInput.getGenerativeModel({ 
+      const response = await aiInput.models.generateContent({
         model: 'gemini-1.5-flash-latest',
-        systemInstruction: SYSTEM_PROMPT,
-      });
-
-      const response = await model.generateContent({
         contents: [
           ...chatHistory,
           { role: 'user', parts: [{ text: input }] }
         ],
-        generationConfig: {
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
           temperature: 0.7,
-          maxOutputTokens: 1000,
         }
       });
 
       const assistantMessage: Message = { 
         role: 'assistant', 
-        content: response.response.text() || 'Sin respuesta.',
+        content: response.text || 'Sin respuesta.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error: any) {
       console.error('Error with Gemini API:', error);
+      let errorMessage = 'Ocurrió un error al conectar con la API de Gemini.';
+      
+      if (error?.message?.includes('API key not valid')) {
+        errorMessage = 'La API Key ingresada no es válida. Por favor, revísala en los ajustes.';
+      } else if (error?.message?.includes('API Key must be set')) {
+        errorMessage = 'Error de configuración: La API Key no se detectó correctamente. Intenta reingresarla.';
+      }
+      
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: `**Error de Conexión:** ${error?.message || 'Ocurrió un error al conectar con la API de Gemini. Por favor revisa tu API Key.'}`,
+        content: `**Error de Conexión:** ${error?.message || errorMessage}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
     } finally {
